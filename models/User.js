@@ -4,30 +4,23 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
     user_id: {
         type: Number,
-        unique: true,
-        sparse: true
+        unique: true
     },
     username: {
         type: String,
         required: true,
-        unique: true,
-        trim: true
+        unique: true
     },
     password: {
         type: String,
         required: true
     },
-    fullName: {
-        type: String,
-        default: ''
-    },
     role: {
         type: String,
-        default: 'user',
-        enum: ['user', 'admin', 'librarian']
+        default: 'user'
     }
 }, {
-    timestamps: true
+    timestamps: true  // This creates createdAt and updatedAt automatically
 });
 
 // Hash password before saving
