@@ -5,6 +5,85 @@ const User = require('../models/User');
 
 const router = express.Router();
 
+// ============================================
+// 📝 SIGNUP ENDPOINT - Add this FIRST
+// ============================================
+
+router.post('/signup', async (req, res) => {
+    try {
+        const { username, password, email, fullName } = req.body;
+        
+        console.log('=================================');
+        console.log('📝 Signup attempt for:', username);
+        
+        // Validate required fields
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username and password are required' });
+        }
+        
+        // Check if username already exists
+        const existingUser = await User.findOne({ username });
+        if (existingUser) {
+            console.log('❌ Username already taken:', username);
+            return res.status(400).json({ error: 'Username already taken' });
+        }
+        
+        // Check if email already exists (if provided)
+        if (email) {
+            const existingEmail = await User.findOne({ email });
+            if (existingEmail) {
+                console.log('❌ Email already registered:', email);
+                return res.status(400).json({ error: 'Email already registered' });
+            }
+        }
+        
+        // Get next user_id
+        const lastUser = await User.findOne().sort({ user_id: -1 });
+        const nextId = lastUser ? lastUser.user_id + 1 : 3; // Start from 3 since admin(1) and programmer(2) exist
+        
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // Create new user
+        const newUser = new User({
+            username: username,
+            password: hashedPassword,
+            email: email || '',
+            fullName: fullName || '',
+            role: 'user',
+            user_id: nextId
+        });
+        
+        await newUser.save();
+        
+        console.log('✅ New user created successfully!');
+        console.log(`   Username: ${username}`);
+        console.log(`   User ID: ${nextId}`);
+        console.log(`   Role: user`);
+        console.log('=================================');
+        
+        res.status(201).json({
+            success: true,
+            message: 'User created successfully',
+            user: {
+                username: newUser.username,
+                email: newUser.email,
+                fullName: newUser.fullName,
+                role: newUser.role,
+                user_id: newUser.user_id
+            }
+        });
+        
+    } catch (error) {
+        console.error('Signup error:', error);
+        res.status(500).json({ error: 'Server error during signup' });
+    }
+});
+
+// ============================================
+// 🔐 LOGIN ENDPOINT
+// ============================================
+
 router.post('/login', async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -38,7 +117,8 @@ router.post('/login', async (req, res) => {
             { 
                 userId: user._id, 
                 username: user.username,
-                user_id: user.user_id 
+                user_id: user.user_id,
+                role: user.role
             },
             process.env.JWT_SECRET || 'your_jwt_secret_key',
             { expiresIn: '24h' }
@@ -52,6 +132,7 @@ router.post('/login', async (req, res) => {
             token,
             username: user.username,
             user_id: user.user_id,
+            role: user.role,
             message: 'Login successful'
         });
         
@@ -60,6 +141,10 @@ router.post('/login', async (req, res) => {
         res.status(500).json({ error: 'Server error' });
     }
 });
+
+// ============================================
+// 🔍 TEST ENDPOINTS
+// ============================================
 
 // Simple test endpoint to verify admin exists
 router.get('/test-admin', async (req, res) => {
@@ -80,6 +165,24 @@ router.get('/test-admin', async (req, res) => {
             passwordHash: admin.password.substring(0, 30) + '...',
             passwordValid: isValid,
             message: isValid ? 'Admin password is correct' : 'Admin password hash is invalid'
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Debug endpoint to see all users
+router.get('/debug-users', async (req, res) => {
+    try {
+        const users = await User.find({}).select('-password');
+        res.json({
+            totalUsers: users.length,
+            users: users.map(u => ({
+                username: u.username,
+                email: u.email,
+                role: u.role,
+                user_id: u.user_id
+            }))
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -112,6 +215,15 @@ router.post('/reset-admin', async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+});
+
+// Ping endpoint to test if server is running
+router.get('/ping', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        message: 'Server is running',
+        timestamp: new Date()
+    });
 });
 
 module.exports = router;
