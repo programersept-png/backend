@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
     user_id: {
@@ -10,7 +9,8 @@ const userSchema = new mongoose.Schema({
     username: {
         type: String,
         required: true,
-        unique: true
+        unique: true,
+        trim: true
     },
     password: {
         type: String,
@@ -18,24 +18,11 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        default: 'user'
+        default: 'user',
+        enum: ['user', 'admin', 'librarian']
     }
 }, {
     timestamps: true
-});
-
-// Simple pre-save hook - NO next() issues
-userSchema.pre('save', function(next) {
-    if (!this.isModified('password')) {
-        return next();
-    }
-    
-    // Hash password
-    bcrypt.hash(this.password, 10, (err, hash) => {
-        if (err) return next(err);
-        this.password = hash;
-        next();
-    });
 });
 
 module.exports = mongoose.model('User', userSchema);
