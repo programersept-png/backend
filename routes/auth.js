@@ -3,13 +3,18 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-// ✅ THIS MUST BE AT THE TOP - Initialize router
 const router = express.Router();
 
 // ============================================
-// 📝 SIGNUP ENDPOINT
+// PUBLIC ENDPOINTS - No authentication required
 // ============================================
 
+// Test endpoint
+router.get('/test', (req, res) => {
+    res.json({ message: 'Auth routes working!', timestamp: new Date() });
+});
+
+// Signup endpoint
 router.post('/signup', async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -17,14 +22,23 @@ router.post('/signup', async (req, res) => {
         console.log('=================================');
         console.log('📝 Signup attempt for:', username);
         
-        // Validate
+        // Validation
         if (!username || !password) {
             return res.status(400).json({ error: 'Username and password are required' });
+        }
+        
+        if (username.length < 3) {
+            return res.status(400).json({ error: 'Username must be at least 3 characters' });
+        }
+        
+        if (password.length < 4) {
+            return res.status(400).json({ error: 'Password must be at least 4 characters' });
         }
         
         // Check if user exists
         const existingUser = await User.findOne({ username });
         if (existingUser) {
+            console.log('❌ Username already taken:', username);
             return res.status(400).json({ error: 'Username already taken' });
         }
         
@@ -32,17 +46,22 @@ router.post('/signup', async (req, res) => {
         const lastUser = await User.findOne().sort({ user_id: -1 });
         const nextId = lastUser ? lastUser.user_id + 1 : 3;
         
-        // Create user (let the pre-save hook hash the password)
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // Create new user
         const newUser = new User({
             user_id: nextId,
             username: username,
-            password: password,
+            password: hashedPassword,
             role: 'user'
         });
         
         await newUser.save();
         
-        console.log('✅ User created:', username);
+        console.log('✅ User created successfully!');
+        console.log(`   Username: ${username}`);
+        console.log(`   User ID: ${nextId}`);
         console.log('=================================');
         
         res.status(201).json({
@@ -56,39 +75,39 @@ router.post('/signup', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Signup error:', error);
+        console.error('❌ Signup error:', error);
         res.status(500).json({ error: 'Server error: ' + error.message });
     }
 });
 
-// ============================================
-// 🔐 LOGIN ENDPOINT
-// ============================================
-
+// Login endpoint
 router.post('/login', async (req, res) => {
     try {
         const { username, password } = req.body;
         
         console.log('=================================');
-        console.log('Login attempt for:', username);
+        console.log('🔐 Login attempt for:', username);
         
+        // Find user
         const user = await User.findOne({ username });
         
         if (!user) {
-            console.log('❌ User not found');
+            console.log('❌ User not found:', username);
             return res.status(401).json({ error: 'Invalid username or password' });
         }
         
+        // Compare password
         const isPasswordValid = await bcrypt.compare(password, user.password);
         
         if (!isPasswordValid) {
-            console.log('❌ Invalid password');
+            console.log('❌ Invalid password for:', username);
             return res.status(401).json({ error: 'Invalid username or password' });
         }
         
+        // Generate token
         const token = jwt.sign(
             { 
-                userId: user._id, 
+                userId: user._id,
                 username: user.username,
                 user_id: user.user_id,
                 role: user.role
@@ -97,7 +116,7 @@ router.post('/login', async (req, res) => {
             { expiresIn: '24h' }
         );
         
-        console.log('✅ Login successful');
+        console.log('✅ Login successful:', username);
         console.log('=================================');
         
         res.json({
@@ -114,25 +133,18 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// ============================================
-// 🔍 TEST ENDPOINTS
-// ============================================
-
-router.get('/ping', (req, res) => {
-    res.json({ message: 'pong', timestamp: new Date() });
-});
-
-router.get('/health', async (req, res) => {
+// Debug endpoint - check users
+router.get('/users', async (req, res) => {
     try {
-        const mongoose = require('mongoose');
-        const dbState = mongoose.connection.readyState;
-        const states = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
-        const userCount = await User.countDocuments();
-        
+        const users = await User.find({}).select('-password');
         res.json({
-            database: states[dbState],
-            userCount: userCount,
-            timestamp: new Date()
+            count: users.length,
+            users: users.map(u => ({
+                user_id: u.user_id,
+                username: u.username,
+                role: u.role,
+                createdAt: u.createdAt
+            }))
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
